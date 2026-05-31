@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>StudentDiscussionHub</title>
+        <!-- PeerJS for Remote Connectivity -->
+        <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+        <style>
+            body {
+                background-color: #d1d9d9;
+                font-family: Arial, sans-serif;
+                margin: 0;
+                display: flex;
+                justify-content: center;
+                align-items: flex-start;
+                padding: 40px 20px;
+                min-height: 100vh;
+                box-sizing: border-box;
+            }
+            .container {
+                background-color: #ffffff;
+                width: 100%;
+                max-width: 1100px;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+                display: flex;
+                flex-direction: column;
+                border-radius: 8px;
+                overflow: hidden;
+            }
+            header {
+                background-color: #008b8b;
+                color: white;
+                padding: 20px;
+                text-align: center;
+                position: relative;
+            }
+            header h1 {
+                font-size: 24px;
+                margin: 0;
+            }
+            #toggle-btn {
+                position: absolute;
+                left: 20px;
+                top: 50%;
+                transform: translateY(-50%);
+                cursor: pointer;
+            }
+            .main-layout {
+                display: flex;
+                flex: 1;
+            }
+            .left-panel {
+                width: 200px;
+                background-color: #e0f7f7;
+                padding: 20px;
+                border-right: 1px solid #ccc;
+            }
+            .left-panel ul {
+                list-style: none;
+                padding: 0;
+            }
+            .left-panel li {
+                padding: 10px;
+                cursor: pointer;
+                transition: background 0.3s;
+            }
+            .left-panel li:hover {
+                background-color: #b2e0e0;
+            }
+            .center-panel {
+                flex: 1;
+                padding: 20px;
+                background-color: #f0ffff;
+            }
+            .left-panel.hidden {
+                display: none;
+            }
+            .form-group {
+                display: flex;
+                margin-bottom: 15px;
+                align-items: center;
+            }
+            .form-group label {
+                flex: 0 0 220px;
+                font-weight: bold;
+            }
+            .form-group input {
+                flex: 1;
+                padding: 8px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+            }
+            .restricted {
+                display: none;
+            }
+            /* Room Layout Grid */
+            .room-grid {
+                display: grid;
+                grid-template-columns: 180px 1fr 180px;
+                grid-template-rows: auto 1fr auto;
+                gap: 20px;
+                padding: 30px;
+                background: #f4fbfb;
+                border: 2px solid #008b8b;
+                border-radius: 15px;
+                align-items: center;
+            }
+            .grid-top { grid-column: 1 / 4; display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+            .grid-bottom { grid-column: 1 / 4; display: flex; justify-content: center; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
+            .grid-left { grid-column: 1; display: flex; justify-content: center; }
+            .grid-right { grid-column: 3; display: flex; justify-content: center; }
+            .grid-center-table { 
+                grid-column: 2; 
+                height: 120px; 
+                background: white; 
+                border: 3px double #008b8b; 
+                border-radius: 60px; 
+                display: flex; 
+                align-items: center; 
+                justify-content: center; 
+                color: #008b8b; 
+                font-weight: bold; 
+                text-transform: uppercase;
+                letter-spacing: 2px;
+            }
+            .seat {
+                padding: 15px;
+                background: white;
+                border: 2px solid #008b8b;
+                border-radius: 8px;
+                text-align: center;
+                min-width: 140px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            }
+            .seat.level-1 { background-color: #ffd700; transform: scale(1.1); font-weight: bold; }
+            .seat.level-2 { background-color: #f0e68c; }
+            .connection-status {
+                background: #27ae60;
+                color: white;
+                padding: 5px 10px;
+                font-size: 12px;
+                border-radius: 4px;
+            }
+            .seat.active-speaker {
+                border-color: #e74c3c;
+                box-shadow: 0 0 15px rgba(231, 76, 60, 0.5);
+                animation: pulse 2s infinite;
+            }
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.05); }
+                100% { transform: scale(1); }
+            }
+            @keyframes blink {
+                0% { opacity: 1; }
+                50% { opacity: 0.4; }
+                100% { opacity: 1; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <button id="toggle-btn" aria-expanded="true" aria-controls="nav-menu">Menu</button>
+                <h1>Student Online Discussion System</h1>
+                <div id="peer-id-display" style="font-size: 12px; margin-top: 5px; opacity: 0.9;">Initializing remote connection...</div>
+            </header>
+
+            <div class="main-layout">
+                <aside class="left-panel">
+                    <h3>Navigation</h3>
+                    <ul id="nav-menu">
+                        <li data-section="home" class="auth-link">Home / Login</li>
+                        <li data-section="signup" class="auth-link">Create Account</li>
+                        <li data-section="registration" class="restricted">Group Registration</li>
+                        <li data-section="open-room" class="restricted">Open Discussion Room</li>
+                        <li data-section="assign-members" class="restricted">Assign Members to Positions</li>
+                        <li data-section="start-discussion" class="restricted">Start Discussion</li>
+                        <li data-section="end-discussion" class="restricted">End Discussion</li>
+                        <li data-section="logout" class="restricted" style="color: #c0392b; font-weight: bold; border-top: 1px solid #ccc; margin-top: 10px;">Logout</li>
+                    </ul>
+                </aside>
+
+                <main class="center-panel" id="main-content">
+                    <!-- Initial Content -->
+                    <h1>Welcome</h1>
+                    <p>Please select a section from the menu to begin.</p>
+                </main>
+            </div>
+        </div>
+
+        <script>
+            // Global state to store registered members
+            let memberDataRaw = []; // Holds names from registration
+            let registeredMembers = [];
+            let isLoggedIn = false;
+            let isDiscussionActive = false;
+            let currentSpeakerIndex = -1;
+            let uploadedQuestionsContent = "";
+            let discussionInterval = null;
+            let timeLeft = 0;
+            let micStream = null;
+            let audioCtx = null;
+            let peer = null;
+            let remotePeerId = null;
+
+            // Initialize PeerJS for Remote Connection
+            const initRemoteConnection = () => {
+                if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+                    console.error("WebRTC requires a secure context (HTTPS). Remote features will fail.");
+                    document.getElementById('peer-id-display').innerHTML = `<span style="color: #e74c3c;">Remote Error: HTTPS Required</span>`;
+                }
+
+                peer = new Peer();
+                
+                peer.on('open', (id) => {
+                    document.getElementById('peer-id-display').innerHTML = `Your Connection ID: <strong>${id}</strong> (Share this with remote members)`;
+                    
+                    // Automatically detect and connect if remoteId is provided in the URL
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const autoId = urlParams.get('remoteId');
+                    if (autoId && !remotePeerId) {
+                        remotePeerId = autoId;
+                        console.log("Automatic remote peer identification successful: " + remotePeerId);
+                    }
+                });
+
+                // Listen for incoming voice streams from remote members
+                peer.on('call', (call) => {
+                    call.answer(); // Answer without sending local stream initially
+                    call.on('stream', (remoteStream) => {
+                        const audio = new Audio();
+                        audio.srcObject = remoteStream;
+                        audio.play();
+                        console.log("Receiving remote audio...");
+                    });
+                });
+
+                peer.on('error', (err) => {
+                    console.error("PeerJS Error:", err);
+                    // Suppress annoying alert for signaling fluctuations, 
+                    // only alert for critical issues like unavailable IDs
+                    if (err.type === 'network') {
+                        console.warn("Signaling server connection lost. Remote audio features may be temporarily unavailable.");
+                    } else if (err.type === 'webrtc') {
+                        console.error("WebRTC Protocol Error:", err);
+                        alert("Communication Error (webrtc): Failed to establish a secure media connection.\n\nIMPORTANT: If you are connecting from a different computer, you MUST use an HTTPS (SSL) connection for audio streaming to work.");
+                    } else {
+                        alert("Communication Error: " + err.type);
+                    }
+                });
+            };
+
+            initRemoteConnection();
+
+            // Function to stop microphone stream
+            const stopMicrophone = () => {
+                if (micStream) {
+                    micStream.getTracks().forEach(track => track.stop());
+                    micStream = null;
+                }
+                if (audioCtx) {
+                    audioCtx.close();
+                    audioCtx = null;
+                }
+            };
+
+            // Content Data
+            const sections = {
+                home: `
+                    <h2>Login to Discussion Hub</h2>
+                    <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 20px;">
+                        <img src="https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&q=80&w=300" alt="Books" style="width: 300px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                        <div style="flex: 1; background: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #3498db;">
+                            <h4 style="margin-top: 0; color: #2980b9;">Remote Participation</h4>
+                            <p style="font-size: 14px;">To connect with a remote student, enter their Connection ID below:</p>
+                            <input type="text" id="remote-id-input" placeholder="Paste Remote ID here" style="padding: 8px; width: 70%; border: 1px solid #ccc; border-radius: 4px;">
+                            <button id="connect-peer-btn" style="padding: 8px 12px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">Connect</button>
+                            <p id="conn-status-msg" style="font-size: 12px; margin-top: 10px; color: #7f8c8d;">Status: Disconnected</p>
+                        </div>
+                    </div>
+                    <p>Welcome! Please log in to access the discussion forums and participate in the conversations.</p>
+                    <form id="login-form">
+                            <div class="form-group"><label for="username">Username:</label><input type="text" id="username" name="username" required></div>
+                            <div class="form-group"><label for="password">Password:</label><input type="password" id="password" name="password" required></div>
+                        <button type="submit">Login</button> 
+                        <p style="margin-top:15px; font-size: 0.9em;">Don't have an account? <a href="#" onclick="document.querySelector('li[data-section=\'signup\']').click(); return false;">Create one here</a>.</p>
+                    </form>
+                `,
+                signup: `
+                    <h2>Create New Account</h2>
+                    <p>Register to become a moderator and manage discussion sessions.</p>
+                    <form id="signup-form">
+                        <div class="form-group"><label for="fullname">Full Name:</label><input type="text" id="fullname" name="fullname" required></div>
+                        <div class="form-group"><label for="email">Email Address:</label><input type="email" id="email" name="email" required></div>
+                        <div class="form-group"><label for="new-username">Username:</label><input type="text" id="new-username" name="username" required></div>
+                        <div class="form-group"><label for="new-password">Password:</label><input type="password" id="new-password" name="password" required></div>
+                        <button type="submit">Create Account</button>
+                    </form>
+                `,
+                registration: `
+                    <h2>Group Registration</h2>
+                    <form id="registration-form">
+                            <div class="form-group">
+                                <label for="total-members">Total Number Of Members:</label>
+                                <input type="number" id="total-members" name="total-members" min="1" required>
+                                <button type="button" id="generate-btn" style="margin-left: 10px; padding: 5px 10px; cursor: pointer;">Fetch Name Entries</button>
+                            </div>
+                            <div id="dynamic-members-container"></div>
+                            <button type="submit" id="reg-submit-btn" style="margin-left: 220px; display: none; padding: 10px 20px; cursor: pointer;">Submit</button>
+                    </form>
+                `,
+                "open-room": `
+                    <h2>Discussion Room</h2>
+                    <div id="room-container"><p>No group registered yet. Please go to Group Registration.</p></div>
+                `,
+                "assign-members": `
+                    <h2>Assign Members to Positions</h2>
+                    <p>Click the button below to finalize the roles based on registration order.</p>
+                    <button id="do-assign-btn" style="padding: 10px 20px; cursor: pointer; background: #008b8b; color: white; border: none; border-radius: 4px;">Finalize Role Assignments</button>
+                `,
+                "start-discussion": `
+                    <h2>Start Discussion</h2>
+                    <p>The session is ready. Click below to begin the live discussion.</p>
+                    <input type="file" id="questions-file-input" accept=".txt,.md,.csv,.log,.text,text/plain" style="display: none;">
+                    <button id="upload-questions-btn" style="padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px; margin-right: 5px;">Upload Questions</button>
+                    <button id="view-questions-btn" style="padding: 10px 20px; cursor: pointer; background: #9b59b6; color: white; border: none; border-radius: 4px; margin-right: 5px;">View Questions</button>
+                    <button id="begin-session-btn" style="padding: 10px 20px; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 4px;">Start Session Now</button>
+                `,
+                "end-discussion": `
+                    <h2>End Discussion</h2>
+                    <p>Save transcript and conclude the current discussion session.</p>
+                    <p>Click below to conclude the current live discussion session.</p>
+                    <button id="finish-session-btn" style="padding: 10px 20px; cursor: pointer; background: #c0392b; color: white; border: none; border-radius: 4px;">End Session</button>
+                `
+            };
+
+            // Handle Navigation Clicks
+            document.getElementById('nav-menu').addEventListener('click', function(e) {
+                if (e.target.tagName === 'LI') {
+                    const sectionKey = e.target.getAttribute('data-section');
+                    
+                    // Enforce login for all sections except Login and Signup
+                    if (!isLoggedIn && sectionKey !== 'home' && sectionKey !== 'signup') {
+                        alert("Access Denied: You must login first to access the discussion hub.");
+                        return;
+                    }
+
+                    // Handle Logout Logic
+                    if (sectionKey === 'logout') {
+                        if (discussionInterval) clearInterval(discussionInterval);
+                        isLoggedIn = false;
+                        isDiscussionActive = false;
+                        registeredMembers = [];
+                        memberDataRaw = [];
+                        currentSpeakerIndex = -1;
+                        timeLeft = 0;
+                        document.querySelectorAll('.restricted').forEach(el => el.style.display = 'none');
+                        document.querySelectorAll('.auth-link').forEach(el => el.style.display = 'block');
+                        stopMicrophone();
+                        alert('You have been logged out.');
+                        document.querySelector('li[data-section="home"]').click();
+                        return;
+                    }
+
+                    document.getElementById('main-content').innerHTML = sections[sectionKey];
+                    
+                    // Handle login form submission if "home" is loaded
+                    if (sectionKey === 'home') {
+                        // Restore connection UI state automatically from global variable
+                        if (remotePeerId) {
+                            const remoteInput = document.getElementById('remote-id-input');
+                            const statusMsg = document.getElementById('conn-status-msg');
+                            if (remoteInput) remoteInput.value = remotePeerId;
+                            if (statusMsg) {
+                                statusMsg.innerHTML = `Connected to: <strong>${remotePeerId}</strong>`;
+                                statusMsg.style.color = "#27ae60";
+                            }
+                        }
+
+                        // Handle the Connect button for remote participation
+                        const connectPeerBtn = document.getElementById('connect-peer-btn');
+                        if (connectPeerBtn) {
+                            connectPeerBtn.onclick = () => {
+                                const inputId = document.getElementById('remote-id-input').value.trim();
+                                if (inputId) {
+                                    remotePeerId = inputId;
+                                    const statusMsg = document.getElementById('conn-status-msg');
+                                    statusMsg.innerHTML = `Connected to: <strong>${remotePeerId}</strong>`;
+                                    statusMsg.style.color = "#27ae60";
+                                    alert("Success: Successfully linked to remote member ID!");
+                                } else {
+                                    alert("Please paste a valid Connection ID from your fellow member.");
+                                }
+                            };
+                        }
+
+                        document.getElementById('login-form').onsubmit = async (event) => {
+                            event.preventDefault();
+                            const formData = new FormData(event.target);
+                            const data = Object.fromEntries(formData.entries());
+                            
+                            try {
+                                const response = await fetch('api.php?action=login', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(data)
+                                });
+                                
+                                if (!response.ok) throw new Error('Server returned ' + response.status);
+                                
+                                const result = await response.json();
+                                if (result.success) {
+                                    isLoggedIn = true;
+                                    document.querySelectorAll('.restricted').forEach(el => el.style.display = 'block');
+                                    document.querySelectorAll('.auth-link').forEach(el => el.style.display = 'none');
+                                    alert('Login successful! Authenticated via MySQL.');
+                                    document.querySelector('li[data-section="registration"]').click();
+                                } else {
+                                    alert('Login failed: ' + result.message);
+                                }
+                            } catch (err) {
+                                console.error('Login Fetch Error:', err);
+                                alert('Error connecting to MySQL API: ' + err.message);
+                            }
+                        };
+                    }
+                    // Handle signup form submission
+                    if (sectionKey === 'signup') {
+                        document.getElementById('signup-form').onsubmit = async (event) => {
+                            event.preventDefault();
+                            const formData = new FormData(event.target);
+                            const data = Object.fromEntries(formData.entries());
+
+                            try {
+                                const response = await fetch('api.php?action=signup', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(data)
+                                });
+
+                                if (!response.ok) throw new Error('Server returned ' + response.status);
+
+                                const result = await response.json();
+                                if (result.success) {
+                                    alert('Account successfully registered in MySQL!');
+                                    document.querySelector('li[data-section="home"]').click();
+                                } else {
+                                    alert('Signup failed: ' + result.message);
+                                }
+                            } catch (err) {
+                                console.error('Signup Fetch Error:', err);
+                                alert('Error connecting to MySQL API: ' + err.message);
+                            }
+                        };
+                    }
+                    // Handle registration form submission
+                    if (sectionKey === 'registration') {
+                        const generateBtn = document.getElementById('generate-btn');
+                        const container = document.getElementById('dynamic-members-container');
+                        const totalInput = document.getElementById('total-members');
+                        const submitBtn = document.getElementById('reg-submit-btn');
+
+                        generateBtn.onclick = () => {
+                            const count = parseInt(totalInput.value);
+                            if (isNaN(count) || count <= 0) {
+                                alert('Please enter a valid number of members.');
+                                return;
+                            }
+                            
+                            submitBtn.style.display = 'block';
+                            let html = '';
+                            for (let i = 1; i <= count; i++) {
+                                let label = '';
+                                if (i === 1) label = 'Chair Person:';
+                                else if (i === 2) label = 'Vice Chair Person:';
+                                else if (i === 3 && count > 2) label = 'First Member:';
+                                else if (i === count && count > 3) label = 'Last Member:';
+                                else label = `Member ${i}:`;
+
+                                html += `
+                                    <div style="border-bottom: 1px solid #eee; margin-bottom: 10px; padding-bottom: 10px;">
+                                        <div class="form-group"><label>${label} Name</label><input type="text" name="name_${i}" placeholder="Enter Name" required></div>
+                                        <div class="form-group"><label>WhatsApp (e.g. 255...)</label><input type="text" name="phone_${i}" placeholder="Country Code + Number" required></div>
+                                    </div>`;
+                            }
+                            container.innerHTML = html;
+                        };
+
+                        document.getElementById('registration-form').onsubmit = (event) => {
+                            event.preventDefault();
+                            const nameInputs = container.querySelectorAll('input[name^="name_"]');
+                            const phoneInputs = container.querySelectorAll('input[name^="phone_"]');
+                            memberDataRaw = Array.from(nameInputs).map((input, idx) => ({
+                                name: input.value,
+                                phone: phoneInputs[idx].value
+                            }));
+                            alert('Group names saved! Please go to "Assign Members to Positions" to finalize.');
+                        };
+                    }
+
+                    // Handle Role Assignment Logic
+                    if (sectionKey === 'assign-members') {
+                        document.getElementById('do-assign-btn').onclick = async () => {
+                            if (memberDataRaw.length === 0) {
+                                alert('No members registered. Please go to Group Registration first.');
+                                return;
+                            }
+                            registeredMembers = memberDataRaw.map((data, index) => {
+                                let role = '';
+                                const i = index + 1;
+                                const count = memberDataRaw.length;
+                                if (i === 1) role = 'Chair Person';
+                                else if (i === 2) role = 'Vice Chair Person';
+                                else if (i === 3 && count > 2) role = 'First Member';
+                                else if (i === count && count > 3) role = 'Last Member';
+                                else role = `Member ${i}`;
+                                return { name: data.name, phone: data.phone, role, level: i };
+                            });
+
+                            // Save finalized records to MySQL
+                            try {
+                                const response = await fetch('api.php?action=save_members', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ members: registeredMembers })
+                                });
+                                const result = await response.json();
+                                if (result.success) {
+                                    alert('Discussion records installed in MySQL!');
+                                    document.querySelector('li[data-section="open-room"]').click();
+                                } else {
+                                    alert('MySQL Error: ' + result.message);
+                                }
+                            } catch (err) {
+                                console.error("Installation Error:", err);
+                                alert('Connection Error: Check the browser console (F12) for details. Ensure you are running this via http://localhost');
+                            }
+                        };
+                    }
+
+                    // Handle End Discussion Logic
+                    if (sectionKey === 'end-discussion') {
+                        document.getElementById('finish-session-btn').onclick = () => {
+                            if (registeredMembers.length === 0) {
+                                alert('Access Denied: No group members have been assigned roles yet.');
+                                return;
+                            }
+
+                            const chair = registeredMembers[0]; // The Chair Person is the first registered member
+                            const confirmName = prompt(`Only the ${chair.role} is authorized to end the session.\n\nPlease enter the Chair Person's name ("${chair.name}") to confirm:`);
+
+                            if (confirmName !== chair.name) {
+                                if (confirmName !== null) alert('Authorization Failed: Only the assigned Chair Person can end the session.');
+                                return;
+                            }
+
+                            if (discussionInterval) clearInterval(discussionInterval);
+                            isDiscussionActive = false;
+                            stopMicrophone();
+                            currentSpeakerIndex = -1;
+                            alert('The discussion session has been successfully concluded by ' + chair.name + '.');
+                            document.querySelector('li[data-section="open-room"]').click();
+                        };
+                    }
+
+                    // Handle Start Discussion Logic
+                    if (sectionKey === 'start-discussion') {
+                        document.getElementById('upload-questions-btn').onclick = () => {
+                            alert('Select a file to upload questions for the session.');
+                            document.getElementById('questions-file-input').click();
+                        };
+                        document.getElementById('questions-file-input').onchange = (e) => {
+                            if (e.target.files.length > 0) {
+                                const file = e.target.files[0];
+
+                                // 1. Upload binary file for PDF Viewing (session_documents table)
+                                const formData = new FormData();
+                                formData.append('document', file);
+                                fetch('api.php?action=upload_document', {
+                                    method: 'POST',
+                                    body: formData
+                                }).then(res => res.json()).then(res => {
+                                    if (!res.success) console.error("Binary upload failed:", res.message);
+                                });
+
+                                // 2. Process text content for session logic and questions table
+                                const reader = new FileReader();
+                                reader.onload = async (event) => {
+                                    uploadedQuestionsContent = event.target.result;
+                                    const questions = uploadedQuestionsContent.split('\n').filter(q => q.trim() !== '');
+                                    
+                                    try {
+                                        const response = await fetch('api.php?action=save_questions', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ questions })
+                                        });
+                                        const result = await response.json();
+                                        if (result.success) {
+                                            alert('File "' + file.name + '" fully installed in MySQL (Binary & Text)!');
+                                        } else {
+                                            alert('MySQL Error: ' + result.message);
+                                        }
+                                    } catch (err) {
+                                        alert('Connection Error: Could not reach api.php');
+                                    }
+                                };
+                                reader.readAsText(file);
+                            }
+                        };
+                        document.getElementById('view-questions-btn').onclick = async () => {
+                            document.getElementById('main-content').innerHTML = `
+                                <h2>Session Document Viewer</h2>
+                                <div style="border: 1px solid #ccc; border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+                                    <iframe src="view_pdf.php?id=1" width="100%" height="600" style="border: none;"></iframe>
+                                </div>
+                                <button onclick="document.querySelector('li[data-section=\\'start-discussion\\']').click()" 
+                                        style="padding: 10px 20px; cursor: pointer; background: #008b8b; color: white; border: none; border-radius: 4px;">
+                                    Back to Session Controls
+                                </button>
+                            `;
+                        };
+                        document.getElementById('begin-session-btn').onclick = () => {
+                            if (!isLoggedIn) {
+                                alert('Access Denied: You must be logged in with valid credentials to connect to a live session.');
+                                document.querySelector('li[data-section="home"]').click();
+                                return;
+                            }
+                            if (registeredMembers.length === 0) {
+                                alert('No members assigned. Please finalize role assignments first.');
+                                return;
+                            }
+                            
+                            // Calculate time per person based on questions (30 seconds per question)
+                            const questionsCount = uploadedQuestionsContent.split('\n').filter(line => line.trim() !== '').length || 1;
+                            const timePerMember = questionsCount * 30; 
+                            
+                            isDiscussionActive = true;
+                            currentSpeakerIndex = 0;
+                            timeLeft = timePerMember;
+
+                            if (discussionInterval) clearInterval(discussionInterval);
+                            
+                            discussionInterval = setInterval(() => {
+                                if (!isDiscussionActive) {
+                                    clearInterval(discussionInterval);
+                                    return;
+                                }
+                                timeLeft--;
+                                if (timeLeft <= 0) {
+                                    currentSpeakerIndex++;
+                                    stopMicrophone();
+                                    if (currentSpeakerIndex >= registeredMembers.length) {
+                                        clearInterval(discussionInterval);
+                                        isDiscussionActive = false;
+                                        alert('The discussion has reached its scheduled end.');
+                                    } else {
+                                        timeLeft = timePerMember;
+                                    }
+                                    // Refresh room automatically to show next speaker
+                                    document.querySelector('li[data-section="open-room"]').click();
+                                } else {
+                                    const timerDisplay = document.getElementById('session-timer');
+                                    if (timerDisplay) timerDisplay.innerText = timeLeft + "s";
+                                }
+                            }, 1000);
+
+                            alert('Discussion started successfully!');
+                            // Transition immediately to the Room to show the active session
+                            document.querySelector('li[data-section="open-room"]').click();
+                        };
+                    }
+
+                    // Dynamically generate the room layout if "open-room" is clicked
+                    if (sectionKey === 'open-room' && memberDataRaw.length > 0) {
+                        const count = memberDataRaw.length;
+                        const displayList = memberDataRaw.map((n, index) => {
+                            const i = index + 1;
+                            let role = (i === 1) ? 'Chair Person' : (i === 2 ? 'Vice Chair Person' : (i === 3 && count > 2 ? 'First Member' : (i === count && count > 3 ? 'Last Member' : `Member ${i}`)));
+                            // Only show name if assignment has been finalized
+                            return { name: registeredMembers.length > 0 ? n.name : "", role: role, level: i, idx: index };
+                        });
+
+                        const chair = displayList.find(m => m.level === 1);
+                        const vice = displayList.find(m => m.level === 2);
+                        const others = displayList.filter(m => m.level > 2);
+
+                        const topSide = others.filter((_, i) => i % 2 === 0);
+                        const bottomSide = others.filter((_, i) => i % 2 !== 0);
+
+                        const getSeatHtml = (m) => {
+                            if (!m) return "";
+                            const levelClass = m.level === 1 ? 'level-1' : (m.level === 2 ? 'level-2' : '');
+                            const activeClass = (isDiscussionActive && m.idx === currentSpeakerIndex) ? 'active-speaker' : '';
+                            return `<div class="seat ${levelClass} ${activeClass}"><strong>${m.role}</strong><br>${m.name}</div>`;
+                        };
+
+                        let roomHtml = '<div class="room-grid">';
+                        
+                        roomHtml += '<div class="grid-top">';
+                        topSide.forEach(m => roomHtml += getSeatHtml(m));
+                        roomHtml += '</div>';
+
+                        roomHtml += '<div class="grid-left">';
+                        roomHtml += getSeatHtml(chair);
+                        roomHtml += '</div>';
+
+                        const tableStatus = isDiscussionActive 
+                            ? `<div style="text-align:center">
+                                <span style="color: #e74c3c; animation: blink 1s infinite; display:block; font-size: 0.8em;">● LIVE</span>
+                                <span id="session-timer" style="font-size: 1.2em;">${timeLeft}s</span>
+                               </div>` 
+                            : 'Discussion Table';
+                        roomHtml += `<div class="grid-center-table">${tableStatus}</div>`;
+
+                        roomHtml += '<div class="grid-right">';
+                        roomHtml += getSeatHtml(vice);
+                        roomHtml += '</div>';
+
+                        roomHtml += '<div class="grid-bottom">';
+                        bottomSide.forEach(m => roomHtml += getSeatHtml(m));
+                        roomHtml += '</div>';
+
+                        roomHtml += '</div>';
+
+                        if (isDiscussionActive) {
+                            const isChairSpeaking = currentSpeakerIndex === 0;
+                            roomHtml += `
+                                <div style="margin-top: 30px; text-align: center; border-top: 2px solid #008b8b; padding-top: 20px; background: #f9f9f9; border-radius: 0 0 8px 8px;">
+                                    <h3>Live Session Controls</h3>
+                                    <div style="margin-bottom: 15px; background: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #3498db; display: inline-block; width: 80%;">
+                                        <p><strong>Speaker: ${registeredMembers[currentSpeakerIndex].name}</strong></p>
+                                        <button id="mic-toggle-btn" style="padding: 12px 24px; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 50px; font-weight: bold; transition: all 0.3s;">
+                                            🎤 Start Speaking (Use Mic)
+                                        </button>
+                                        <button id="whatsapp-backup-btn" style="padding: 12px 24px; cursor: pointer; background: #25D366; color: white; border: none; border-radius: 50px; font-weight: bold; margin-left: 10px;">
+                                            WhatsApp Backup
+                                        </button>
+                                    </div>
+                                    <div style="margin-bottom: 15px; background: #fffbe6; padding: 15px; border-radius: 8px; border: 1px solid #ffe58f; display: ${isChairSpeaking ? 'inline-block' : 'none'};">
+                                        <label style="display:block; margin-bottom:5px;"><strong>Voice Command (Text-to-Speech):</strong></label>
+                                        <input type="text" id="chair-voice-input" placeholder="Enter question or command..." style="padding: 8px; width: 300px; border-radius: 4px; border: 1px solid #ccc;">
+                                        <button id="speak-btn" style="padding: 8px 15px; cursor: pointer; background: #e67e22; color: white; border: none; border-radius: 4px; margin-left: 5px;">Speak Loudly</button>
+                                    </div>
+                                    <br>
+                                    <button id="next-speaker-btn" style="padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px;">Next Speaker</button>
+                                    <p id="speaker-status" style="margin-top: 10px; font-weight: bold; color: #008b8b;">
+                                        Status: ${registeredMembers[currentSpeakerIndex].role} is currently presenting.
+                                    </p>
+                                </div>
+                            `;
+                        }
+
+                        document.getElementById('room-container').innerHTML = roomHtml;
+
+                        if (isDiscussionActive) {
+                            // WhatsApp Backup Logic
+                            document.getElementById('whatsapp-backup-btn').onclick = () => {
+                                // Target the current active speaker using their registered phone number
+                                const speaker = registeredMembers[currentSpeakerIndex]; 
+                                if (speaker && speaker.phone) {
+                                    // Use the WhatsApp deep link protocol to initiate a video call
+                                    // Sanitizing the phone number to digits only to ensure the deep link resolves correctly
+                                    window.location.href = `whatsapp://call?phone=${speaker.phone.replace(/\D/g, '')}&video=1`;
+                                } else {
+                                    alert("Unable to initiate call: The speaker's phone number is not registered.");
+                                }
+                            };
+
+                            // Microphone Logic
+                            const micBtn = document.getElementById('mic-toggle-btn');
+                            micBtn.onclick = async () => {
+                                if (!micStream) {
+                                    try {
+                                        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                                        const source = audioCtx.createMediaStreamSource(micStream);
+                                        source.connect(audioCtx.destination);
+                                        
+                                        // If connected to a remote peer, call them with the voice stream
+                                        if (remotePeerId && peer) {
+                                            peer.call(remotePeerId, micStream);
+                                        }
+
+                                        micBtn.innerText = "🛑 Stop Speaking (Mic Active)";
+                                        micBtn.style.background = "#e74c3c";
+                                        document.getElementById('speaker-status').innerText = remotePeerId 
+                                            ? "Status: Broadcasting voice to remote peer..." 
+                                            : "Status: Microphone is broadcasting locally...";
+                                    } catch (err) {
+                                        alert("Cannot access microphone. Please ensure you have given permission.");
+                                        console.error(err);
+                                    }
+                                } else {
+                                    stopMicrophone();
+                                    micBtn.innerText = "🎤 Start Speaking (Use Mic)";
+                                    micBtn.style.background = "#2ecc71";
+                                    document.getElementById('speaker-status').innerText = "Status: Microphone is muted.";
+                                }
+                            };
+
+                            // Voice Synthesis Logic
+                            const speakBtn = document.getElementById('speak-btn');
+                            if (speakBtn) {
+                                speakBtn.onclick = () => {
+                                    const text = document.getElementById('chair-voice-input').value;
+                                    if (text) {
+                                        const utterance = new SpeechSynthesisUtterance(text);
+                                        utterance.rate = 0.9; 
+                                        window.speechSynthesis.speak(utterance);
+                                    } else {
+                                        alert('Please enter text for the Chair to speak.');
+                                    }
+                                };
+                            };
+
+                            document.getElementById('next-speaker-btn').onclick = () => {
+                                stopMicrophone();
+                                currentSpeakerIndex++;
+                                if (currentSpeakerIndex >= registeredMembers.length) {
+                                    alert('All members have shared their ideas.');
+                                    currentSpeakerIndex = -1;
+                                }
+                                // Refresh room to show active speaker
+                                document.querySelector('li[data-section="open-room"]').click();
+                            };
+                        }
+                    }
+                }
+            });
+
+            // Sidebar Toggle Logic
+            document.getElementById('toggle-btn').addEventListener('click', function() {
+                const panel = document.querySelector('.left-panel');
+                const isHidden = panel.classList.toggle('hidden');
+                this.setAttribute('aria-expanded', !isHidden);
+            });
+
+            // Load Home by default
+            document.querySelector('li[data-section="home"]').click();
+        </script>
+    </body>
+</html>
