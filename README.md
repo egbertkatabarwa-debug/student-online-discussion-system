@@ -60,4 +60,4 @@ Initialize the Local Host Server
 Spin up your Apache and MySQL service nodes via your server control dashboard.
 Open a modern, secure web browser instance.
 Navigate directly to your local development address:
-[![Open UI](https://img.shields.io/badge/Launch-Discussion%20Hub-008b8b?style=for-the-badge&logo=rocket)](https://egbertkatabarwa-debug.github.io/student-online-discussion-system/index.html)
+[![Open UI](https://img.shields.io/badge/Launch-Discussion%20Hub-008b8b?style=for-the-badge&logo=rocket)](https://egbertkatabarwa-debug.github.io/student-online-discussion-system)
