@@ -4,7 +4,8 @@ These system aimed to help student to discuss and share knowledges online from d
 
 System Interface Overview
 Based on the operational flow of the system, the application is divided into five core stages:
-Login & Remote Gateways: A secure portal authentication dashboard coupled with an integrated PeerJS infrastructure. Remote students can instantly connect to a live session by exchanging global connection IDs.
+Login & Remote Gateways: A secure portal authentication dashboard coupled with an integrated PeerJS infrastructure. 
+Remote students can instantly connect to a live session by exchanging global connection IDs.
 Group Discussion Registration: An adjustable registry interface where hosts set the total member count to instantly fetch and generate clean, dynamic data entry fields capturing student names and localized WhatsApp connectivity tags.
 Seating Layout Workspace: A visual representation mapping out real-time digital collaboration. Registered students are assigned distinct seating tiles arrayed around a central virtual oval discussion table.
 Live Interactive Forums: A monitored classroom simulation including live phase transitions, an active countdown timer displaying the speaker's remaining floor time, and prominent glowing pulse indicators around the current speaker's seating tile.
