@@ -19,7 +19,7 @@
             .container {
                 background-color: #ffffff;
                 width: 100%;
-                max-width: 1100px;
+                max-width: 1300px;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.1);
                 display: flex;
                 flex-direction: column;
@@ -121,6 +121,17 @@
                 font-weight: bold; 
                 text-transform: uppercase;
                 letter-spacing: 2px;
+                position: relative;
+                overflow: hidden;
+            }
+            .grid-center-table video {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+                border-radius: 60px;
+                position: absolute;
+                top: 0;
+                left: 0;
             }
             .seat {
                 padding: 15px;
@@ -155,6 +166,42 @@
                 50% { opacity: 0.4; }
                 100% { opacity: 1; }
             }
+            /* Chat / Posts Styling */
+            .chat-log-container {
+                margin-top: 25px;
+                width: 100%;
+                background: #fff;
+                border: 2px solid #008b8b;
+                border-radius: 12px;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            }
+            .chat-header {
+                background: #008b8b;
+                color: white;
+                padding: 12px 20px;
+                font-weight: bold;
+            }
+            .chat-messages {
+                height: 250px;
+                overflow-y: auto;
+                padding: 15px;
+                background: #fafafa;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .message {
+                padding: 10px 15px;
+                border-radius: 18px;
+                max-width: 85%;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            .message.local { background: #e0f2f1; align-self: flex-end; border: 1px solid #b2dfdb; color: #004d40; }
+            .message.remote { background: #fff; align-self: flex-start; border: 1px solid #e0e0e0; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         </style>
     </head>
     <body>
@@ -169,14 +216,14 @@
                 <aside class="left-panel">
                     <h3>Navigation</h3>
                     <ul id="nav-menu">
-                        <li data-section="home" class="auth-link">Home / Login</li>
-                        <li data-section="signup" class="auth-link">Create Account</li>
-                        <li data-section="registration" class="restricted">Group Registration</li>
-                        <li data-section="open-room" class="restricted">Open Discussion Room</li>
-                        <li data-section="assign-members" class="restricted">Assign Members to Positions</li>
-                        <li data-section="start-discussion" class="restricted">Start Discussion</li>
-                        <li data-section="end-discussion" class="restricted">End Discussion</li>
-                        <li data-section="logout" class="restricted" style="color: #c0392b; font-weight: bold; border-top: 1px solid #ccc; margin-top: 10px;">Logout</li>
+                        <li data-section="home" class="auth-link" style="background-color:#b2e0e0; border: 2px solid #008b8b;">Home / Login</li><br/>
+                        <li data-section="signup" class="auth-link" style="background-color:#b2e0e0; border: 2px solid #008b8b;">Create Account</li><br/>
+                        <li data-section="registration" class="restricted" style="background-color:#b2e0e0; border: 2px solid #008b8b;">Group Registration</li><br/>
+                        <li data-section="open-room" class="restricted" style="background-color:#b2e0e0; border: 2px solid #008b8b;">Open Discussion Room</li><br/>
+                        <li data-section="assign-members" class="restricted" style="background-color:#b2e0e0; border: 2px solid #008b8b;">Assign Members to Positions</li><br/>
+                        <li data-section="start-discussion" class="restricted" style="background-color:#b2e0e0; border: 2px solid #008b8b;">Start Discussion</li><br/>
+                        <li data-section="end-discussion" class="restricted" style="background-color:#b2e0e0; border: 2px solid #008b8b;">End Discussion</li><br/>
+                        <li data-section="logout" class="restricted" style="color: #c0392b; font-weight: bold; border-top: 2px solid #ccc; margin-top: 10px;">Logout</li>
                     </ul>
                 </aside>
 
@@ -196,6 +243,7 @@
             let isDiscussionActive = false;
             let currentSpeakerIndex = -1;
             let uploadedQuestionsContent = "";
+            let chatHistory = []; // Stores text responses
             let discussionInterval = null;
             let timeLeft = 0;
             let micStream = null;
@@ -233,6 +281,36 @@
                         audio.play();
                         console.log("Receiving remote audio...");
                     });
+                    call.on('stream', (remoteMediaStream) => {
+                        // Display remote video in the discussion frame if available
+                        const videoEl = document.getElementById('table-video-feed');
+                        const defaultView = document.getElementById('table-default-view');
+                        
+                        if (videoEl) {
+                            videoEl.srcObject = remoteMediaStream;
+                            videoEl.style.display = 'block';
+                            videoEl.muted = false; // Ensure remote audio is audible
+                            if (defaultView) defaultView.style.background = 'rgba(255,255,255,0.6)';
+                            console.log("Displaying remote video in discussion frame.");
+                        } else {
+                            const audio = new Audio();
+                            audio.srcObject = remoteMediaStream;
+                            audio.play();
+                            console.log("Receiving remote audio (fallback).");
+                        }
+                    });
+                });
+
+                // Listen for incoming text data (Discussion Responses)
+                peer.on('connection', (conn) => {
+                    conn.on('data', (data) => {
+                        if (data.type === 'text-response') {
+                            chatHistory.push({ sender: data.sender, text: data.text, type: 'remote' });
+                            // Force UI update if in open-room section
+                            const chatList = document.getElementById('chat-messages-list');
+                            if (chatList) renderChatHistory();
+                        }
+                    });
                 });
 
                 peer.on('error', (err) => {
@@ -251,6 +329,18 @@
             };
 
             initRemoteConnection();
+
+            // Helper to render chat history into the UI
+            const renderChatHistory = () => {
+                const list = document.getElementById('chat-messages-list');
+                if (!list) return;
+                list.innerHTML = chatHistory.map(msg => `
+                    <div class="message ${msg.type}">
+                        <strong>${msg.sender}</strong> ${msg.text}
+                    </div>
+                `).join('');
+                list.scrollTop = list.scrollHeight;
+            };
 
             // Function to stop microphone stream
             const stopMicrophone = () => {
@@ -282,7 +372,7 @@
                     <form id="login-form">
                             <div class="form-group"><label for="username">Username:</label><input type="text" id="username" name="username" required></div>
                             <div class="form-group"><label for="password">Password:</label><input type="password" id="password" name="password" required></div>
-                        <button type="submit">Login</button> 
+                        <button type="submit" style="padding: 8px 12px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer;">Login</button> 
                         <p style="margin-top:15px; font-size: 0.9em;">Don't have an account? <a href="#" onclick="document.querySelector('li[data-section=\'signup\']').click(); return false;">Create one here</a>.</p>
                     </form>
                 `,
@@ -610,14 +700,16 @@
                         };
                         document.getElementById('view-questions-btn').onclick = async () => {
                             document.getElementById('main-content').innerHTML = `
-                                <h2>Session Document Viewer</h2>
-                                <div style="border: 1px solid #ccc; border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                    <h2 style="margin: 0;">Session Document Viewer</h2>
+                                    <button onclick="document.querySelector('li[data-section=\\'start-discussion\\']').click()" 
+                                            style="padding: 10px 20px; cursor: pointer; background: #008b8b; color: white; border: none; border-radius: 4px;">
+                                        Back to Session Controls
+                                    </button>
+                                </div>
+                                <div style="border: 1px solid #ccc; border-radius: 8px; overflow: hidden;">
                                     <iframe src="view_pdf.php?id=1" width="100%" height="600" style="border: none;"></iframe>
                                 </div>
-                                <button onclick="document.querySelector('li[data-section=\\'start-discussion\\']').click()" 
-                                        style="padding: 10px 20px; cursor: pointer; background: #008b8b; color: white; border: none; border-radius: 4px;">
-                                    Back to Session Controls
-                                </button>
                             `;
                         };
                         document.getElementById('begin-session-btn').onclick = () => {
@@ -706,10 +798,11 @@
                         roomHtml += '</div>';
 
                         const tableStatus = isDiscussionActive 
-                            ? `<div style="text-align:center">
-                                <span style="color: #e74c3c; animation: blink 1s infinite; display:block; font-size: 0.8em;">● LIVE</span>
+                            ? `<video id="table-video-feed" autoplay playsinline muted style="display: none;"></video>
+                               <div id="table-default-view" style="text-align:center; z-index: 1;">
+                                <span style="color: #e74c3c; animation: blink 1s infinite; display:block; font-size: 0.8em;">● LIVE SESSION</span>
                                 <span id="session-timer" style="font-size: 1.2em;">${timeLeft}s</span>
-                               </div>` 
+                               </div>`
                             : 'Discussion Table';
                         roomHtml += `<div class="grid-center-table">${tableStatus}</div>`;
 
@@ -723,45 +816,153 @@
 
                         roomHtml += '</div>';
 
+                        // Navigation buttons for section toggling
+                        roomHtml += `
+                            <div style="display: flex; gap: 10px; margin: 20px 0; justify-content: center;">
+                                <button id="view-posts-btn" style="padding: 10px 25px; cursor: pointer; background: #008b8b; color: white; border: none; border-radius: 5px; font-weight: bold;">View Posts</button>
+                                ${isDiscussionActive ? '<button id="member-control-btn" style="padding: 10px 25px; cursor: pointer; background: #008b8b; color: white; border: none; border-radius: 5px; font-weight: bold;">Member Control</button>' : ''}
+                            </div>
+                        `;
+
+                        // Add Text Discussion Area
+                        roomHtml += `
+                            <div id="posts-area-section" style="display: none; width: 100%;">
+                                <div class="chat-log-container">
+                                    <div class="chat-header"><span>Discussion Posts</span> <span style="font-size:0.8em; font-weight:normal;">(Visible to all members)</span></div>
+                                    <div id="chat-messages-list" class="chat-messages"></div>
+                                    <div style="padding: 10px; display: flex; gap: 8px; border-top: 1px solid #eee; background: #f4fbfb;">
+                                        <input type="text" id="chat-input-field" placeholder="Type your response to the question..." style="flex: 1; padding: 10px 15px; border: 1px solid #ccc; border-radius: 25px; outline: none;">
+                                        <button id="chat-send-btn" style="padding: 0 20px; background: #008b8b; color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold;">Post</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+
                         if (isDiscussionActive) {
-                            const isChairSpeaking = currentSpeakerIndex === 0;
                             roomHtml += `
-                                <div style="margin-top: 30px; text-align: center; border-top: 2px solid #008b8b; padding-top: 20px; background: #f9f9f9; border-radius: 0 0 8px 8px;">
-                                    <h3>Live Session Controls</h3>
-                                    <div style="margin-bottom: 15px; background: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #3498db; display: inline-block; width: 80%;">
-                                        <p><strong>Speaker: ${registeredMembers[currentSpeakerIndex].name}</strong></p>
-                                        <button id="mic-toggle-btn" style="padding: 12px 24px; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 50px; font-weight: bold; transition: all 0.3s;">
-                                            🎤 Start Speaking (Use Mic)
-                                        </button>
-                                        <button id="whatsapp-backup-btn" style="padding: 12px 24px; cursor: pointer; background: #25D366; color: white; border: none; border-radius: 50px; font-weight: bold; margin-left: 10px;">
-                                            WhatsApp Backup
-                                        </button>
+                                <div id="controls-area-section" style="display: none; width: 100%; margin-top: 25px; background: #fff; border: 2px solid #008b8b; border-radius: 12px; flex-direction: column; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+                                    <div class="chat-header"><span>Live Session Controls</span></div>
+                                    <div style="padding: 20px; text-align: center; background: #fafafa;">
+                                        <div style="margin-bottom: 15px; background: #e8f4f8; padding: 15px; border-radius: 8px; border: 1px solid #3498db; display: inline-block; width: 80%;">
+                                            <p><strong>Speaker: ${registeredMembers[currentSpeakerIndex].name}</strong></p>
+                                            <button id="mic-toggle-btn" style="padding: 12px 24px; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 50px; font-weight: bold; transition: all 0.3s;">
+                                                🎤 Start Speaking (Use Mic)
+                                            </button>
+                                            <button id="whatsapp-call-btn" style="padding: 12px 24px; cursor: pointer; background: #25D366; color: white; border: none; border-radius: 50px; font-weight: bold; margin-left: 10px;">
+                                                WhatsApp Video Call
+                                            </button>
+                                        </div>
+                                        <br>
+                                        <button id="next-speaker-btn" style="padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px;">Next Speaker</button>
+                                        <p id="speaker-status" style="margin-top: 10px; font-weight: bold; color: #008b8b;">
+                                            Status: ${registeredMembers[currentSpeakerIndex].role} is currently presenting.
+                                        </p>
                                     </div>
-                                    <div style="margin-bottom: 15px; background: #fffbe6; padding: 15px; border-radius: 8px; border: 1px solid #ffe58f; display: ${isChairSpeaking ? 'inline-block' : 'none'};">
-                                        <label style="display:block; margin-bottom:5px;"><strong>Voice Command (Text-to-Speech):</strong></label>
-                                        <input type="text" id="chair-voice-input" placeholder="Enter question or command..." style="padding: 8px; width: 300px; border-radius: 4px; border: 1px solid #ccc;">
-                                        <button id="speak-btn" style="padding: 8px 15px; cursor: pointer; background: #e67e22; color: white; border: none; border-radius: 4px; margin-left: 5px;">Speak Loudly</button>
-                                    </div>
-                                    <br>
-                                    <button id="next-speaker-btn" style="padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px;">Next Speaker</button>
-                                    <p id="speaker-status" style="margin-top: 10px; font-weight: bold; color: #008b8b;">
-                                        Status: ${registeredMembers[currentSpeakerIndex].role} is currently presenting.
-                                    </p>
                                 </div>
                             `;
                         }
 
                         document.getElementById('room-container').innerHTML = roomHtml;
 
+                        // Visibility toggle logic for Posts and Member Controls
+                        const postsArea = document.getElementById('posts-area-section');
+                        const controlsArea = document.getElementById('controls-area-section');
+                        const vPostsBtn = document.getElementById('view-posts-btn');
+                        const mControlBtn = document.getElementById('member-control-btn');
+
+                        if (vPostsBtn) {
+                            vPostsBtn.onclick = () => {
+                                postsArea.style.display = 'flex';
+                                if (controlsArea) controlsArea.style.display = 'none';
+                            };
+                        }
+                        if (mControlBtn) {
+                            mControlBtn.onclick = () => {
+                                postsArea.style.display = 'none';
+                                if (controlsArea) controlsArea.style.display = 'flex';
+                            };
+                        }
+
+                        // Initialize Chat Interaction
+                        renderChatHistory();
+                        const sendBtn = document.getElementById('chat-send-btn');
+                        const chatInput = document.getElementById('chat-input-field');
+                        
+                        const handleSend = () => {
+                            const text = chatInput.value.trim();
+                            if (!text) return;
+                            
+                            // Identify sender (Moderator or active local speaker)
+                            const sender = registeredMembers[currentSpeakerIndex] ? registeredMembers[currentSpeakerIndex].name : "Moderator";
+                            chatHistory.push({ sender, text, type: 'local' });
+                            
+                            // Transmit to remote peer via Data Channel
+                            if (remotePeerId && peer) {
+                                const conn = peer.connect(remotePeerId);
+                                conn.on('open', () => {
+                                    conn.send({ type: 'text-response', sender: sender, text: text });
+                                });
+                            }
+                            
+                            chatInput.value = '';
+                            renderChatHistory();
+                        };
+
+                        if (sendBtn) {
+                            sendBtn.onclick = handleSend;
+                            chatInput.onkeypress = (e) => { if (e.key === 'Enter') handleSend(); };
+                        }
+
                         if (isDiscussionActive) {
-                            // WhatsApp Backup Logic
-                            document.getElementById('whatsapp-backup-btn').onclick = () => {
-                                // Target the current active speaker using their registered phone number
+                            // Persistence: If a video stream is already active, re-bind it to the new frame element
+                            if (micStream) {
+                                const videoEl = document.getElementById('table-video-feed');
+                                if (videoEl) {
+                                    videoEl.srcObject = micStream;
+                                    videoEl.style.display = 'block';
+                                    const defaultView = document.getElementById('table-default-view');
+                                    if (defaultView) defaultView.style.background = 'rgba(255,255,255,0.6)';
+                                }
+                            }
+                            // WhatsApp Video Call Logic
+                            document.getElementById('whatsapp-call-btn').onclick = async () => {
+                                // Target the current assigned speaker using their registered phone number
                                 const speaker = registeredMembers[currentSpeakerIndex]; 
                                 if (speaker && speaker.phone) {
-                                    // Use the WhatsApp deep link protocol to initiate a video call
-                                    // Sanitizing the phone number to digits only to ensure the deep link resolves correctly
-                                    window.location.href = `whatsapp://call?phone=${speaker.phone.replace(/\D/g, '')}&video=1`;
+                                    try {
+                                        // Request both Audio and Video for the frame display
+                                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+                                        micStream = stream;
+
+                                        // Display the video feed inside the central table frame
+                                        const videoEl = document.getElementById('table-video-feed');
+                                        const defaultView = document.getElementById('table-default-view');
+                                        
+                                        if (videoEl) {
+                                            videoEl.srcObject = stream;
+                                            videoEl.style.display = 'block';
+                                            if (defaultView) defaultView.style.background = 'rgba(255,255,255,0.6)';
+                                            
+                                            // If PeerJS is active, broadcast the video call to the remote participant
+                                            if (remotePeerId && peer) {
+                                                peer.call(remotePeerId, stream);
+                                            }
+                                            
+                                            document.getElementById('speaker-status').innerText = "Status: Video Call active in Discussion Frame.";
+                                            document.getElementById('speaker-status').innerText = `Status: Video Call active with ${speaker.name}`;
+                                            
+                                            // Also trigger the external WhatsApp deep link as a background action if needed
+                                            // Trigger external WhatsApp Video Call directly to the registered mobile number
+                                            const sanitizedPhone = speaker.phone.replace(/\D/g, '');
+                                            console.log("Initiating WhatsApp signaling for: " + sanitizedPhone);
+                                            // window.open(`whatsapp://call?phone=${sanitizedPhone}&video=1`, '_blank');
+                                            console.log("Initiating external WhatsApp call for: " + sanitizedPhone);
+                                            window.open(`whatsapp://call?phone=${sanitizedPhone}&video=1`, '_blank');
+                                        }
+                                    } catch (err) {
+                                        alert("Camera access denied. Video cannot be displayed in the frame.");
+                                        console.error(err);
+                                    }
                                 } else {
                                     alert("Unable to initiate call: The speaker's phone number is not registered.");
                                 }
@@ -797,21 +998,6 @@
                                     micBtn.style.background = "#2ecc71";
                                     document.getElementById('speaker-status').innerText = "Status: Microphone is muted.";
                                 }
-                            };
-
-                            // Voice Synthesis Logic
-                            const speakBtn = document.getElementById('speak-btn');
-                            if (speakBtn) {
-                                speakBtn.onclick = () => {
-                                    const text = document.getElementById('chair-voice-input').value;
-                                    if (text) {
-                                        const utterance = new SpeechSynthesisUtterance(text);
-                                        utterance.rate = 0.9; 
-                                        window.speechSynthesis.speak(utterance);
-                                    } else {
-                                        alert('Please enter text for the Chair to speak.');
-                                    }
-                                };
                             };
 
                             document.getElementById('next-speaker-btn').onclick = () => {
