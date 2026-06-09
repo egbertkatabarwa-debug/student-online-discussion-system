@@ -56,3 +56,8 @@ CREATE TABLE users (
     password VARCHAR(255) NOT NULL
 );
 
+Initialize the Local Host Server
+Spin up your Apache and MySQL service nodes via your server control dashboard.
+Open a modern, secure web browser instance.
+Navigate directly to your local development address:
+http://localhost/Student-Online-Discussion-system/index.html
